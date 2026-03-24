@@ -50,7 +50,9 @@ setTimeout(() => {
   const newState = tableRef.value.getData(id);
   if (newState && !newState.expanded) {
     // 触发组件内置事件，自动拉取子节点并追加
-    tableRef.value.toggleExpandData(newState.row); 
+    // 注意：这里不要只传 row（纯业务数据），而应该传 getData 返回的整行状态对象，
+    // 否则组件可能丢失树形层级上下文，出现“缩进丢失/看起来像根节点”的现象
+    tableRef.value.toggleExpandData(newState);
   }
 }, 100);
 ```
@@ -72,6 +74,36 @@ if (result.status && result.data && result.data.list) {
   tableRef.value.appendTo(id, children);
 }
 ```
+
+### 3.4 两个容易踩坑的细节（会导致“没进 else、缩进丢失、节点看起来像根节点”）
+
+#### 3.4.1 父节点被误判成“叶子节点”的判断条件
+
+在懒加载模式下，父节点的 `children` 字段通常会被设置成 `true` 作为“待懒加载”的占位标记。
+如果用类似下面的条件去判断“是不是叶子节点”：
+
+```javascript
+// ❌ 错误：children === true 在懒加载父节点场景是常态，不代表叶子
+if (!rawData.hasChildren || rawData.children === true || !rowState.children || rowState.children.length === 0) {
+  // ...
+}
+```
+
+就会导致一个本来就是父节点的节点也进入“叶子转父节点”的分支，从而引发后续展开/刷新混乱。
+
+更稳妥的判断方式是：用 `hasChildren` 判断“逻辑上是否有子节点”，再结合 `rowState.children` 是否已经加载来判断“是否已加载过子节点”：
+
+```javascript
+const hasLoadedChildren = Array.isArray(rowState.children) && rowState.children.length > 0;
+const isLeafNode = !rawData.hasChildren && !hasLoadedChildren;
+```
+
+#### 3.4.2 `toggleExpandData` 传参错误导致树形上下文丢失
+
+`toggleExpandData` 在树形表格场景中，不能只传 `row`（纯业务对象）。如果传了业务对象，组件可能无法正确定位树节点状态，
+表现为“原有子节点缩进丢了/显示成根节点”、展开按钮状态异常、或懒加载事件不触发。
+
+正确做法：传 `getData(id)` 返回的行状态对象（`rowState`/`newState`），或按组件要求传包含 `rowIndex + row` 的结构。
 
 ## 4. 总结经验
 
