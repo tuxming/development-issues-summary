@@ -64,5 +64,27 @@ const tableHeight = computed(() => {
 }
 ```
 
+### 3. 表格实际高度与设置高度不一致导致无法出现滚动条问题
+在给 `<t-enhanced-table>` 或 `<t-table>` 设置了具体的 `height` 属性后，有时会发现表格并没有按照预期的高度渲染（实际高度超出了设置的高度），导致应该在表格内部出现的滚动条没有出现，反而撑开了外层容器出现了页面级的滚动条。
+
+**原因分析：**
+这通常是因为表格处于某个 CSS 容器（例如 Flex 布局或者某个特定的 wrapper 容器）中，该外层容器没有限制其自身的最大高度，导致被表格内部的数据直接撑开。即便我们通过计算得到了一个安全的 `tableHeight` 并传递给 TDesign，但如果外层容器允许无限扩展，TDesign 内部的一些高度计算逻辑或者虚拟滚动逻辑就无法正确感知到边界，从而导致滚动条失效。
+
+**解决办法：**
+确保包裹表格的外层 DOM 元素（或组件）不能被子元素无限撑开。
+最直接的方法是在包裹表格的外层 div 上也加上高度限制，或者更简单的，给表格外层的包裹容器（比如 `<div class="table-wrap">`）添加绝对的高度或者 `overflow: hidden;`，以强制划定边界。如果是在 Flex 布局中，需要给外层 Flex 容器加上 `min-height: 0;`。
+
+**示例代码：**
+如果是普通的 div 包裹，可以直接将计算好的 `tableHeight` 也应用到外层：
+```html
+<div class="table-wrap" :style="{ height: tableHeight + 'px', overflow: 'hidden' }">
+  <t-enhanced-table
+    :height="tableHeight"
+    :scroll="{ type: 'virtual', rowHeight: 48, bufferSize: 20 }"
+    ...
+  />
+</div>
+```
+
 ## 总结
 通过 `window.innerHeight - offset` 的方式能够最暴力且有效地解决一切由于 DOM 层级复杂、Flex 嵌套导致的表格高度失控问题。配合简单的 CSS 后代选择器，完美兼顾了功能交互与 UI 视觉细节。
